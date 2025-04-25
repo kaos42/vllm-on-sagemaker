@@ -1,5 +1,13 @@
 #!/bin/bash
 
-# This serve script is the canonical sagemaker endpoint point.
+# SageMaker serve entry point
 
-python3 /app/sagemaker_serving.py
+# Log environment for debugging
+echo "Starting vLLM server on SageMaker"
+echo "MODEL_ID: $MODEL_ID"
+echo "API_HOST: $API_HOST"
+echo "API_PORT: $API_PORT"
+echo "INSTANCE_TYPE: $INSTANCE_TYPE"
+
+# Start the vLLM server
+exec python /app/sagemaker_serving.py
