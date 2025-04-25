@@ -1,20 +1,48 @@
 import boto3
 import argparse
 
-def create_sagemaker_endpoint(region, instance_type, role_arn, image_uri, endpoint_name, model_id):
+def create_sagemaker_endpoint(region, instance_type, role_arn, image_uri, endpoint_name, model_id, 
+                             max_model_len=None, tensor_parallel_size=None, gpu_memory_utilization=None,
+                             swap_space=None, disable_custom_all_reduce=False, enable_prefix_caching=False,
+                             disable_sliding_window=False):
     sagemaker = boto3.client('sagemaker', region_name=region)
+    
+    # Build environment variables dictionary
+    env = {
+        'API_HOST': '0.0.0.0',
+        'API_PORT': '8080',
+        'MODEL_ID': model_id,
+        'INSTANCE_TYPE': instance_type,
+    }
+    
+    # Add optional vLLM parameters if provided
+    if max_model_len:
+        env['MAX_MODEL_LEN'] = str(max_model_len)
+    
+    if tensor_parallel_size:
+        env['TENSOR_PARALLEL_SIZE'] = str(tensor_parallel_size)
+    
+    if gpu_memory_utilization:
+        env['GPU_MEMORY_UTILIZATION'] = str(gpu_memory_utilization)
+    
+    if swap_space:
+        env['SWAP_SPACE'] = str(swap_space)
+    
+    if disable_custom_all_reduce:
+        env['DISABLE_CUSTOM_ALL_REDUCE'] = "1"
+    
+    if enable_prefix_caching:
+        env['ENABLE_PREFIX_CACHING'] = "1"
+    
+    if disable_sliding_window:
+        env['DISABLE_SLIDING_WINDOW'] = "1"
 
     # Create the model
     create_model_response = sagemaker.create_model(
         ModelName=endpoint_name + '-model',
         PrimaryContainer={
             'Image': image_uri,
-            'Environment': {
-                'API_HOST': '0.0.0.0',
-                'API_PORT': '8080',
-                'MODEL_ID': model_id,
-                'INSTANCE_TYPE': instance_type,
-            },
+            'Environment': env,
         },
         ExecutionRoleArn=role_arn,
     )
@@ -51,6 +79,15 @@ if __name__ == '__main__':
     parser.add_argument('--role_arn', required=True, help='SageMaker execution role ARN')
     parser.add_argument('--image_uri', required=True, help='ECR image URI')
     parser.add_argument('--endpoint_name', default='vllm-endpoint', help='SageMaker endpoint name')
+    
+    # Add vLLM specific options
+    parser.add_argument('--max_model_len', type=int, help='Maximum sequence length')
+    parser.add_argument('--tensor_parallel_size', type=int, help='Number of GPUs for tensor parallelism')
+    parser.add_argument('--gpu_memory_utilization', type=float, help='Fraction of GPU memory to use (0.0-1.0)')
+    parser.add_argument('--swap_space', type=int, help='CPU swap space in GiB')
+    parser.add_argument('--disable_custom_all_reduce', action='store_true', help='Disable custom all-reduce implementation')
+    parser.add_argument('--enable_prefix_caching', action='store_true', help='Enable prefix caching')
+    parser.add_argument('--disable_sliding_window', action='store_true', help='Disable sliding window attention')
 
     args = parser.parse_args()
 
@@ -61,4 +98,11 @@ if __name__ == '__main__':
         image_uri=args.image_uri,
         endpoint_name=args.endpoint_name,
         model_id=args.model_id,
+        max_model_len=args.max_model_len,
+        tensor_parallel_size=args.tensor_parallel_size,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        swap_space=args.swap_space,
+        disable_custom_all_reduce=args.disable_custom_all_reduce,
+        enable_prefix_caching=args.enable_prefix_caching,
+        disable_sliding_window=args.disable_sliding_window,
     )

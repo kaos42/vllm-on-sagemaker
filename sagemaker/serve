@@ -10,4 +10,5 @@ echo "API_PORT: $API_PORT"
 echo "INSTANCE_TYPE: $INSTANCE_TYPE"
 
 # Start the vLLM server
-exec python /app/sagemaker_serving.py
+exec python3 /app/sagemaker_serving.py
+
