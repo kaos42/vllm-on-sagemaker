@@ -1,10 +1,25 @@
-import boto3
 import argparse
+import boto3
 
-def create_sagemaker_endpoint(region, instance_type, role_arn, image_uri, endpoint_name, model_id, 
-                             max_model_len=None, tensor_parallel_size=None, gpu_memory_utilization=None,
-                             swap_space=None, disable_custom_all_reduce=False, enable_prefix_caching=False,
-                             disable_sliding_window=False):
+
+def create_sagemaker_endpoint(
+        region: str,
+        instance_type: str,
+        instance_count: int,
+        role_arn: str,
+        image_uri: str,
+        endpoint_name: str,
+        model_id: str,
+        async_s3_output_path: str,
+        async_max_concurrent_invocations_per_instance: int,
+        max_model_len=None,
+        tensor_parallel_size=None,
+        gpu_memory_utilization=None,
+        swap_space=None,
+        disable_custom_all_reduce=False,
+        enable_prefix_caching=False,
+        disable_sliding_window=False,
+):
     sagemaker = boto3.client('sagemaker', region_name=region)
     
     # Build environment variables dictionary
@@ -56,10 +71,14 @@ def create_sagemaker_endpoint(region, instance_type, role_arn, image_uri, endpoi
                 'VariantName': 'default',
                 'ModelName': endpoint_name + '-model',
                 'InstanceType': instance_type,
-                'InitialInstanceCount': 1,
+                'InitialInstanceCount': instance_count,
                 'ContainerStartupHealthCheckTimeoutInSeconds': 600,  # 10 minutes for model loading
             },
         ],
+        AsyncInferenceConfig={
+            'OutputConfig': {'S3OutputPath': async_s3_output_path},
+            'ClientConfig': {'MaxConcurrentInvocationsPerInstance': async_max_concurrent_invocations_per_instance},
+        },
     )
     print(f"Created endpoint config: {endpoint_name}-config")
 
@@ -76,9 +95,14 @@ if __name__ == '__main__':
     parser.add_argument('--region', default='us-east-1', help='AWS region')
     parser.add_argument('--model_id', required=True, help='Hugging Face model ID')
     parser.add_argument('--instance_type', required=True, help='SageMaker instance type')
+    parser.add_argument('--instance_count', type=int, default=1, help='SageMaker instance count')
     parser.add_argument('--role_arn', required=True, help='SageMaker execution role ARN')
     parser.add_argument('--image_uri', required=True, help='ECR image URI')
     parser.add_argument('--endpoint_name', default='vllm-endpoint', help='SageMaker endpoint name')
+
+    # async options
+    parser.add_argument('--async_s3_output_path', default='s3://veddeshp-dev/sagemaker-async-out', help='S3 path to where async results will be output')
+    parser.add_argument('--async_concurrency', type=int, default=10, help='Number of requests Sagemaker will send to each container before throttling new ones')
     
     # Add vLLM specific options
     parser.add_argument('--max_model_len', type=int, help='Maximum sequence length')
@@ -94,10 +118,13 @@ if __name__ == '__main__':
     create_sagemaker_endpoint(
         region=args.region,
         instance_type=args.instance_type,
+        instance_count=args.instance_count,
         role_arn=args.role_arn,
         image_uri=args.image_uri,
         endpoint_name=args.endpoint_name,
         model_id=args.model_id,
+        async_s3_output_path=args.async_s3_output_path,
+        async_max_concurrent_invocations_per_instance=args.async_concurrency,
         max_model_len=args.max_model_len,
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
