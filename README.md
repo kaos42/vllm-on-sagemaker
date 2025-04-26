@@ -53,13 +53,21 @@ echo $SM_ROLE
 Now, create the SageMaker Endpoint. Choose the appropriate Hugging Face model ID and instance type:
 
 ```sh
-python3 sagemaker/create_sagemaker_endpoint.py \
-    --region "$REGION" \
-    --model_id "deepseek-ai/deepseek-llm-7b-chat" \
-    --instance_type ml.g5.4xlarge \
-    --role_arn $SM_ROLE \
-    --image_uri $IMG_URI \
-    --endpoint_name $SAGEMAKER_ENDPOINT_NAME
+# Change the parameters below as needed
+python sagemaker/create_sagemaker_endpoint.py \
+  --region ${REGION} \
+  --model_id Qwen/Qwen2.5-32B-Instruct \
+  --instance_type ml.g6.48xlarge \
+  --role_arn ${SM_ROLE} \
+  --image_uri ${IMG_URI} \
+  --endpoint_name vllm-endpoint \
+  --max_model_len 5120 \
+  --tensor_parallel_size 8 \
+  --gpu_memory_utilization 0.8 \
+  --swap_space 8 \
+  --disable_custom_all_reduce \
+  --enable_prefix_caching \
+  --disable_sliding_window
 ```
 
 ### 6. Check the Endpoint
