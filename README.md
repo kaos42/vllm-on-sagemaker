@@ -1,5 +1,7 @@
 # SageMaker Endpoint for vLLM
 
+_forked from github.com/JianyuZhan/vllm-on-sagemaker_
+
 You can use the [LMI](https://docs.djl.ai/docs/serving/serving/docs/lmi/index.html) to easily run vLLM on Amazon SageMaker. However, the version of vLLM supported by LMI lags several versions behind the latest community version. If you want to run the latest version, try this repo!
 
 ## Prerequisites
@@ -53,14 +55,17 @@ echo $SM_ROLE
 Now, create the SageMaker Endpoint. Choose the appropriate Hugging Face model ID and instance type:
 
 ```sh
-# Change the parameters below as needed
+# Change various arguments as needed
 python sagemaker/create_sagemaker_endpoint.py \
   --region ${REGION} \
   --model_id Qwen/Qwen2.5-32B-Instruct \
   --instance_type ml.g6.48xlarge \
+  --instance_count 10 \
   --role_arn ${SM_ROLE} \
   --image_uri ${IMG_URI} \
-  --endpoint_name vllm-endpoint \
+  --endpoint_name ${SAGEMAKER_ENDPOINT_NAME} \
+  --s3_output_path "my-bucket/sagemaker-output" \
+  --max_concurrent_invocations_per_instance 50 \
   --max_model_len 5120 \
   --tensor_parallel_size 8 \
   --gpu_memory_utilization 0.8 \
@@ -70,12 +75,12 @@ python sagemaker/create_sagemaker_endpoint.py \
   --disable_sliding_window
 ```
 
+Edit 04/26/2025: Updated `create_sagemaker_endpoint` to create an async Sagemaker endpoint. If you want to create a sync endpoint, remove `AsyncInferenceConfig` from the endpoint config creation, and `--max_concurrent_invocations_per_instance` and `--s3_output_path` above.
+
 ### 6. Check the Endpoint
 
 Go to the AWS console -> SageMaker -> Inference -> Endpoints. You should see the endpoint being created. Wait until the creation process is complete.
 
 ### 7. Send Requests to the Endpoint
 
-Once the endpoint is created and in 'InService' status, you can start sending requests to it.
-
-You can use the SageMaker `/invocations` API to call the endpoint; it is compatible with the OpenAI chat completion API. Check the `sagemaker/test_endpoint.py` for example requests.
+Once the endpoint is created and in 'InService' status, you can start sending requests to it. Note that for async endpoint config you'll need to use the InvokeEndpointAsync API.
