@@ -14,6 +14,7 @@ def create_sagemaker_endpoint(
         max_concurrent_invocations_per_instance: int,
         max_model_len=None,
         tensor_parallel_size=None,
+        data_parallel_size=None,
         gpu_memory_utilization=None,
         swap_space=None,
         disable_custom_all_reduce=False,
@@ -21,25 +22,6 @@ def create_sagemaker_endpoint(
         disable_sliding_window=False,
 ):
     """
-
-    :param region:
-    :param instance_type:
-    :param instance_count:
-    :param role_arn:
-    :param image_uri:
-    :param endpoint_name:
-    :param model_id:
-    :param s3_output_path:
-    :param max_concurrent_invocations_per_instance:
-    :param max_model_len:
-    :param tensor_parallel_size:
-    :param gpu_memory_utilization:
-    :param swap_space:
-    :param disable_custom_all_reduce:
-    :param enable_prefix_caching:
-    :param disable_sliding_window:
-    :return:
-
     Example:
     python sagemaker/create_sagemaker_endpoint.py \
       --region ${REGION} \
@@ -74,6 +56,9 @@ def create_sagemaker_endpoint(
     
     if tensor_parallel_size:
         env['TENSOR_PARALLEL_SIZE'] = str(tensor_parallel_size)
+
+    if data_parallel_size:
+        env['DATA_PARALLEL_SIZE'] = str(data_parallel_size)
     
     if gpu_memory_utilization:
         env['GPU_MEMORY_UTILIZATION'] = str(gpu_memory_utilization)
@@ -144,9 +129,10 @@ if __name__ == '__main__':
     
     # Add vLLM specific options
     parser.add_argument('--max_model_len', type=int, help='Maximum sequence length')
-    parser.add_argument('--tensor_parallel_size', type=int, help='Number of GPUs for tensor parallelism')
-    parser.add_argument('--gpu_memory_utilization', type=float, help='Fraction of GPU memory to use (0.0-1.0)')
-    parser.add_argument('--swap_space', type=int, help='CPU swap space in GiB')
+    parser.add_argument('--tensor_parallel_size', required=True, type=int, help='Number of GPUs for tensor parallelism')
+    parser.add_argument('--data_parallel_size', type=int, default=1, help='Number of data parallel sets of GPUs')
+    parser.add_argument('--gpu_memory_utilization', default=0.9, type=float, help='Fraction of GPU memory to use (0.0-1.0)')
+    parser.add_argument('--swap_space', default=1, type=int, help='CPU swap space in GiB')
     parser.add_argument('--disable_custom_all_reduce', action='store_true', help='Disable custom all-reduce implementation')
     parser.add_argument('--enable_prefix_caching', action='store_true', help='Enable prefix caching')
     parser.add_argument('--disable_sliding_window', action='store_true', help='Disable sliding window attention')
@@ -165,6 +151,7 @@ if __name__ == '__main__':
         max_concurrent_invocations_per_instance=args.max_concurrent_invocations_per_instance,
         max_model_len=args.max_model_len,
         tensor_parallel_size=args.tensor_parallel_size,
+        data_parallel_size=args.data_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         swap_space=args.swap_space,
         disable_custom_all_reduce=args.disable_custom_all_reduce,
