@@ -1,71 +1,56 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Initialize default values
+# ---------- defaults ----------
 region="us-east-1"
 tag="latest"
 image_name="vllm-on-sagemaker"
+model_id=""          #  ← now empty by default
+hf_token=""
 
-# Parse named arguments
-while [ "$#" -gt 0 ]; do
+# ---------- parse CLI flags ----------
+while [[ $# -gt 0 ]]; do
   case "$1" in
-    --region) region="$2"; shift 2;;
-    --tag) tag="$2"; shift 2;;
-    --image-name) image_name="$2"; shift 2;;
+    --region)      region="$2";     shift 2;;
+    --tag)         tag="$2";        shift 2;;
+    --image-name)  image_name="$2"; shift 2;;
+    --model-id)    model_id="$2";   shift 2;;
+    --hf-token)    hf_token="$2";   shift 2;;
     --) shift; break;;
     *) echo "Unknown option: $1" >&2; exit 1;;
   esac
 done
 
-# Get the account number associated with the current IAM credentials
 account=$(aws sts get-caller-identity --query Account --output text)
-if [ "$?" -ne 0 ]; then
-    exit 255
-fi
+echo "Building image ${image_name}:${tag}"
+[[ -n $model_id ]] && echo "  Model baked in: $model_id" || echo "  Model baked in: none (pull at runtime)"
 
-echo "Building docker image: $image_name"
-echo "region: $region"
-echo "account: $account"
-echo "tag: $tag"
-
-function build_and_push_image() {
-    local account="$1"
-    local region="$2"
-    local image_name="$3"
-    local docker_file="$4"
-    local policy_file="$5"
-
-    if [[ $region == *cn* ]]; then
-       image_fullname="${account}.dkr.ecr.${region}.amazonaws.com.cn/${image_name}:${tag}"
-       ecr_repo_uri="${account}.dkr.ecr.${region}.amazonaws.com.cn"
-    else
-       image_fullname="${account}.dkr.ecr.${region}.amazonaws.com/${image_name}:${tag}"
-       ecr_repo_uri="${account}.dkr.ecr.${region}.amazonaws.com"
-    fi
-
-    # If the repository doesn't exist in ECR, create it
-    aws ecr describe-repositories --repository-names "${image_name}" --region "${region}" > /dev/null 2>&1 || aws ecr create-repository --repository-name "${image_name}" --region "${region}"
-
-    # Get the login command from ECR and execute it directly
-    aws ecr get-login-password --region "${region}" | \
-	docker login --username AWS --password-stdin "${ecr_repo_uri}"
-
-    aws ecr set-repository-policy \
-        --repository-name "${image_name}" \
-        --policy-text "file://${policy_file}" \
-        --region "${region}"
-
-    # Build the docker image locally with the image name and then push it to ECR
-    # with the full name.
-    build_context="${script_dir/..}"
-    docker build --platform linux/amd64 -t "${image_name}" -f ${docker_file} .
-    docker tag "${image_name}" "${image_fullname}"
-    docker push "${image_fullname}"
-}
-
+# ---------- paths ----------
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-echo $script_dir
+docker_file="${script_dir}/Dockerfile"
+policy_file="${script_dir}/ecr-policy.json"
 
-docker_file="$script_dir/Dockerfile"
-policy_file="$script_dir/ecr-policy.json"
+registry_suffix=${region/*cn*/.cn}
+registry="${account}.dkr.ecr.${region}.amazonaws.com${registry_suffix}"
+image_uri="${registry}/${image_name}:${tag}"
 
-build_and_push_image "${account}" "${region}" "${image_name}" "${docker_file}" "${policy_file}" "${script_dir}"
+# ---------- ensure ECR repo exists ----------
+aws ecr describe-repositories --repository-names "$image_name" --region "$region" \
+  || aws ecr create-repository --repository-name "$image_name" --region "$region"
+
+aws ecr get-login-password --region "$region" | \
+  docker login --username AWS --password-stdin "$registry"
+
+[[ -f $policy_file ]] && aws ecr set-repository-policy \
+  --repository-name "$image_name" --policy-text "file://${policy_file}" --region "$region"
+
+# ---------- build & push ----------
+docker build --platform linux/amd64 \
+  --build-arg MODEL_ID="$model_id" \
+  --build-arg HF_TOKEN="$hf_token" \
+  -t "$image_name" -f "$docker_file" "$script_dir"
+
+docker tag  "$image_name" "$image_uri"
+docker push "$image_uri"
+
+echo "Pushed image: $image_uri"

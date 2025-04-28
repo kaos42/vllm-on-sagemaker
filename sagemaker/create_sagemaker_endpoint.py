@@ -1,6 +1,8 @@
 import argparse
 import boto3
 
+from pathlib import Path
+
 
 def create_sagemaker_endpoint(
         region: str,
@@ -10,6 +12,7 @@ def create_sagemaker_endpoint(
         image_uri: str,
         endpoint_name: str,
         model_id: str,
+        hf_token_path: str,
         s3_output_path: str,
         max_concurrent_invocations_per_instance: int,
         max_model_len=None,
@@ -19,6 +22,7 @@ def create_sagemaker_endpoint(
         swap_space=None,
         disable_custom_all_reduce=False,
         enable_prefix_caching=False,
+        enable_chunked_prefill=False,
         disable_sliding_window=False,
 ):
     """
@@ -43,13 +47,15 @@ def create_sagemaker_endpoint(
     sagemaker = boto3.client('sagemaker', region_name=region)
     
     # Build environment variables dictionary
+    hf_token = Path(hf_token_path).read_text().strip()
     env = {
         'API_HOST': '0.0.0.0',
         'API_PORT': '8080',
         'MODEL_ID': model_id,
         'INSTANCE_TYPE': instance_type,
+        'HUGGING_FACE_HUB_TOKEN': hf_token,
     }
-    
+
     # Add optional vLLM parameters if provided
     if max_model_len:
         env['MAX_MODEL_LEN'] = str(max_model_len)
@@ -71,6 +77,9 @@ def create_sagemaker_endpoint(
     
     if enable_prefix_caching:
         env['ENABLE_PREFIX_CACHING'] = "1"
+    
+    if enable_chunked_prefill:
+        env['ENABLE_CHUNKED_PREFILL'] = "1"
     
     if disable_sliding_window:
         env['DISABLE_SLIDING_WINDOW'] = "1"
@@ -117,6 +126,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--region', default='us-east-1', help='AWS region')
     parser.add_argument('--model_id', required=True, help='Hugging Face model ID')
+    parser.add_argument('--hf_token_path', default='./huggingface-key', help='Path to file containing HuggingFace Hub token')
     parser.add_argument('--instance_type', required=True, help='SageMaker instance type')
     parser.add_argument('--instance_count', type=int, default=1, help='SageMaker instance count')
     parser.add_argument('--role_arn', required=True, help='SageMaker execution role ARN')
@@ -135,6 +145,7 @@ if __name__ == '__main__':
     parser.add_argument('--swap_space', default=1, type=int, help='CPU swap space in GiB')
     parser.add_argument('--disable_custom_all_reduce', action='store_true', help='Disable custom all-reduce implementation')
     parser.add_argument('--enable_prefix_caching', action='store_true', help='Enable prefix caching')
+    parser.add_argument('--enable_chunked_prefill', action='store_true', help='Enable chunked prefill')
     parser.add_argument('--disable_sliding_window', action='store_true', help='Disable sliding window attention')
 
     args = parser.parse_args()
@@ -147,6 +158,7 @@ if __name__ == '__main__':
         image_uri=args.image_uri,
         endpoint_name=args.endpoint_name,
         model_id=args.model_id,
+        hf_token_path=args.hf_token_path,
         s3_output_path=args.s3_output_path,
         max_concurrent_invocations_per_instance=args.max_concurrent_invocations_per_instance,
         max_model_len=args.max_model_len,
@@ -156,5 +168,6 @@ if __name__ == '__main__':
         swap_space=args.swap_space,
         disable_custom_all_reduce=args.disable_custom_all_reduce,
         enable_prefix_caching=args.enable_prefix_caching,
+        enable_chunked_prefill=args.enable_chunked_prefill,
         disable_sliding_window=args.disable_sliding_window,
     )
