@@ -17,8 +17,10 @@ def start_api_server():
     # Override with SageMaker environment variables (basic settings)
     args.host = os.getenv("API_HOST", "0.0.0.0")
     args.port = int(os.getenv("API_PORT", "8080"))
-    args.model = os.getenv("MODEL_ID", args.model)
-    
+    # If MODEL_ID is provided, it means that we will pull the model from HF. Otherwise, it means Sagemaker should
+    # get the model downloaded to its default model dir
+    args.model = os.getenv("MODEL_ID") or os.getenv("SM_MODEL_DIR")
+
     # Add the vLLM advanced options from environment variables
     if os.getenv("MAX_MODEL_LEN"):
         args.max_model_len = int(os.getenv("MAX_MODEL_LEN"))
@@ -41,9 +43,12 @@ def start_api_server():
         
     if os.getenv("DISABLE_SLIDING_WINDOW", "").lower() in ("1", "true", "yes"):
         args.disable_sliding_window = True
+
+    if os.getenv("ENABLE_CHUNKED_PREFILL", "").lower() in ("1", "true", "yes"):
+        args.enable_chunked_prefill = True
     
     # Log configuration
-    print(f"Starting vLLM server with model: {args.model}")
+    print(f"Starting vLLM server with model/path: {args.model}")
     print(f"Host: {args.host}, Port: {args.port}")
     print(f"Advanced options:")
     print(f"  Max Model Length: {getattr(args, 'max_model_len', 'default')}")
@@ -56,7 +61,7 @@ def start_api_server():
     
     # Validate arguments
     if args.model is None:
-        sys.exit("❌ ERROR: MODEL_ID must be set")
+        sys.exit("❌ ERROR: neither MODEL_ID nor SM_MODEL_DIR is set")
     validate_parsed_serve_args(args)
 
     # Use the integrated run_server function from vLLM
